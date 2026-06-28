@@ -50,6 +50,12 @@ to memegen (writing "%25ABV" corrupts the same way); avoid that exact form or
 put a space/character between the '%' and the two hex digits. The --selftest
 pins the local encode() output, not the render. See _selftest.
 
+Known limitation 3: this mirrors memegen's own `_encode` exactly, including its
+quirk that a literal '_' followed by a space rewrites "___" -> "__-" globally,
+so a run of 3+ spaces on the same line is collapsed too. We keep this on purpose
+(diverging would produce a URL memegen never emits, rendering unpredictably).
+Reachability is near-zero in real meme text. See encode() and _selftest.
+
 Usage:
     python3 build_meme_url.py --template mordor \\
         --top "ONE DOES NOT SIMPLY" --bottom "review a 2000 line PR"
@@ -106,6 +112,13 @@ def encode(text):
     for char, repl in _REPLACEMENTS:
         text = text.replace(char, repl)
     if has_trailing_under:
+        # Faithfully mirrors memegen's own `_encode` (app/utils/text.py): when a
+        # literal '_' is followed by a space it rewrites "___" -> "__-". Note the
+        # replace is GLOBAL, so a run of 3+ spaces elsewhere on the same line is
+        # also affected — that's memegen's own quirk, NOT ours. Do NOT "fix" this
+        # by diverging: we must produce the exact URL memegen produces, or the
+        # render becomes unpredictable. See Known limitation 3. (Reachability is
+        # near-zero: needs a literal '_'+space AND a 3-space run in one line.)
         text = text.replace("___", "__-")
     text = urllib.parse.quote(text, safe=_SAFE)
     return text or "_"
@@ -211,6 +224,10 @@ def _selftest():
         ("feat/auth", "feat~sauth"),
         ("snake_case", "snake__case"),
         ("a-b", "a--b"),
+        # literal '_' + space -> "__-" (mirrors memegen's own _encode; see
+        # Known limitation 3). The "___"->"__-" is global, so this also collapses
+        # a 3-space run on the same line — memegen's quirk, kept on purpose.
+        ("a_ b", "a__-b"),
         ("50% done", "50~p_done"),
         # local encode() is correct here, but memegen CORRUPTS this at RENDER:
         # it reverses '~p'->'%' then unquotes, so "%AB" becomes an invalid byte

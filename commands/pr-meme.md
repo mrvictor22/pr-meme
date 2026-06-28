@@ -38,7 +38,8 @@ comentario **solo tras tu confirmación explícita**.
    ```bash
    python3 "${CLAUDE_PLUGIN_ROOT}/scripts/build_meme_url.py" --template <plantilla> --top "<ARRIBA>" --bottom "<ABAJO>" --verify
    ```
-   (Instalación manual del skill: el script queda en `~/.claude/skills/pr-meme/scripts/`.)
+   (Instalación manual del skill: `${CLAUDE_PLUGIN_ROOT}` no está definido; usá el path real,
+   p. ej. `python3 ~/.claude/skills/pr-meme/scripts/build_meme_url.py --template ... --verify`.)
    - `RENDER_FAIL [transient]` (5xx/timeout): memegen no renderizó por un **transitorio**
      (cold-start / blip del router Heroku / rate-limit de la ruta sin `?token=`), no un outage.
      El script ya reintentó con backoff. **No publiques**; avisá "transitorio, reintentá en unos

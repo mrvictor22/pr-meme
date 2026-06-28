@@ -35,7 +35,8 @@ CLI `gh`. **Nunca publica sin tu confirmación explícita.**
    ```bash
    python3 "${CLAUDE_PLUGIN_ROOT}/scripts/build_meme_url.py" --template <plantilla> --top "<ARRIBA>" --bottom "<ABAJO>" --verify
    ```
-   (Instalación manual del skill: el script queda en `~/.claude/skills/pr-meme/scripts/build_meme_url.py`.)
+   (Instalación manual del skill: `${CLAUDE_PLUGIN_ROOT}` no está definido; usá el path real,
+   p. ej. `python3 ~/.claude/skills/pr-meme/scripts/build_meme_url.py --template ... --verify`.)
    - `RENDER_OK` (exit 0) → seguí al paso 6. Si el `RENDER_OK` trae un aviso de que memegen
      **reescribió la URL** a su forma canónica, mostráselo al usuario y confirmá que el texto
      se ve bien antes de proponer (es señal de texto no canónico).
