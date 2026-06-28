@@ -103,16 +103,42 @@ python3 scripts/build_meme_url.py --template mordor \
   --top "ONE DOES NOT SIMPLY" --bottom "review a 2000 line PR"
 # -> https://api.memegen.link/images/mordor/ONE_DOES_NOT_SIMPLY/review_a_2000_line_PR.png
 
+# Texto en español / con emoji: los caracteres no-ASCII se percent-encodean.
+python3 scripts/build_meme_url.py --template success --top "ARREGLÉ EL BUG" --bottom "CI EN VERDE 👍"
+# -> https://api.memegen.link/images/success/ARREGL%C3%89_EL_BUG/CI_EN_VERDE_%F0%9F%91%8D.png
+
 # --verify comprueba que la imagen realmente renderiza (exit 2 si no):
 python3 scripts/build_meme_url.py --template fine --top "THIS IS FINE" --bottom "" --verify
-# -> URL + "RENDER_OK 200 image/png"  (o "RENDER_FAIL 503 ..." si memegen está caído)
+# -> URL + "RENDER_OK 200 image/png"
+#    o "RENDER_FAIL [transient] 503 ..."  (transitorio: reintentá; el script ya hizo backoff)
+#    o "RENDER_FAIL [meme_error] 404 ..."  (bug del meme: template/URL inválido, corregilo)
+
+# --token usa la ruta autenticada (sin marca de agua / sin rate-limit). Opcional.
+# ⚠️ El token queda en la URL; si la posteás en un PR público, queda expuesto.
+# Usalo solo si no te molesta exponerlo (o en repos privados).
+python3 scripts/build_meme_url.py --template fine --top "THIS IS FINE" --bottom "" --token "$MEMEGEN_TOKEN"
 
 python3 scripts/build_meme_url.py --selftest   # valida la codificación (offline)
 ```
 
-Reglas de escape aplicadas: ` ` → `_`, `_` → `__`, `-` → `--`, `?` → `~q`, `&` → `~a`,
-`%` → `~p`, `#` → `~h`, `/` → `~s`, `\` → `~b`, `<` → `~l`, `>` → `~g`, `"` → `''`,
-salto de línea → `~n`, línea vacía → `_`.
+> Dentro del skill/command (como plugin) el script se invoca con
+> `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/build_meme_url.py" ...`, porque la skill corre con
+> el cwd en el repo del PR del usuario, no en el del plugin. En instalación manual queda en
+> `~/.claude/skills/pr-meme/scripts/`.
+
+**Codificación (dos etapas).** Primero se normalizan las comillas tipográficas (`“ ” ‘ ’`)
+y la raya (`–`) a su equivalente ASCII (así un en-dash real `a–b` se escribe como `a-b`), y
+luego las reglas de token de memegen — ` ` → `_`,
+`_` → `__`, `-` → `--`, `?` → `~q`, `&` → `~a`, `%` → `~p`, `#` → `~h`, `/` → `~s`,
+`\` → `~b`, `<` → `~l`, `>` → `~g`, `"` → `''`, salto de línea → `~n`, línea vacía → `_` —
+y luego **percent-encoding** de cada segmento (`urllib.parse.quote`, preservando los tokens
+`~ _ - . '`), de modo que acentos, `ñ`, emoji y símbolos salen como `%XX` y la URL renderiza
+(HTTP 200) en vez de romperse. Limitaciones conocidas: (1) un `~` literal no se puede
+escapar (memegen lo decodifica como token, así que `~q` literal se ve como `?`); (2) un `%`
+seguido de dos dígitos hex (p. ej. `100%ABV`) lo corrompe **memegen** al renderizar —
+revierte `~p`→`%` y luego hace `unquote`, así que `%AB` queda como byte inválido y se ve
+como `�` (`100%ABV` → `100�V`); el `encode()` local es correcto (`100%ABV`→`100~pABV`), pero
+es un límite inherente de memegen: evitá esa forma o separá el `%` de los dos hex.
 
 ## Personalización
 
@@ -129,19 +155,36 @@ salto de línea → `~n`, línea vacía → `_`.
 
 ## Solución de problemas
 
-**El meme sale como imagen rota / no carga en el PR.** memegen.link corre en Heroku detrás
-de Cloudflare; cuando su backend de render se cae, devuelve **`503`** para imágenes nuevas
-(Cloudflare puede seguir sirviendo con `200` las que ya estaban *cacheadas*, así que algunas
-cargan y otras no). El skill **verifica el render con `--verify` antes de proponer/publicar**
-y **no postea** si da `RENDER_FAIL`, justo para no dejar imágenes rotas. (`--verify` fuerza
-un *cache miss* para medir el backend real: una copia cacheada con `200` no lo engaña — es
-exactamente lo que el proxy Camo de GitHub podría no poder servir.) Si te pasa:
+**El meme sale como imagen rota / no carga en el PR.** El skill **verifica el render con
+`--verify` antes de proponer/publicar** y **no postea** si da `RENDER_FAIL`, justo para no
+dejar imágenes rotas. `--verify` distingue dos causas muy distintas:
 
-- Comprobá el estado: `python3 scripts/build_meme_url.py --template fine --top hola --bottom "" --verify`
-  → `RENDER_FAIL 503` significa que la fuente está caída; reintentá más tarde.
-- Si ya quedó un comentario con imagen rota, borralo desde la UI de GitHub (o con
-  `gh api -X DELETE repos/<owner>/<repo>/issues/comments/<comment_id>`) y reintentá cuando
-  memegen.link vuelva.
+- **`RENDER_FAIL [transient]` (5xx / timeout): es un transitorio, NO un outage.** memegen.link
+  corre en Heroku; un `503` casi siempre es un blip pasajero — cold-start del dyno, hipo del
+  router de Heroku, o **rate-limit de la ruta anónima sin `?token=`** — que se resuelve solo en
+  segundos. El script ya reintenta con backoff (~2s, 5s, 10s) antes de declarar fallo. No es que
+  "memegen esté caído": simplemente no renderizó *ahora*. Reintentá en un rato:
+  `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/build_meme_url.py" --template fine --top hola --bottom "" --verify`
+  (en instalación manual: `~/.claude/skills/pr-meme/scripts/build_meme_url.py`).
+  (Nota: `--verify` hace un `GET` normal a propósito; no fuerza un *cache miss* en cada chequeo,
+  porque eso solo empeoraría el rate-limit de la ruta anónima. Una respuesta `200` cacheada es
+  buena señal: es la misma URL que renderizará el proxy Camo de GitHub.)
+- **`RENDER_FAIL [meme_error]` (4xx, p. ej. `404`): es un bug del meme, no de memegen.** Suele
+  ser un template inexistente o una URL inválida. **Corregí la plantilla/los textos** y volvé a
+  verificar; reintentar la misma URL no va a cambiar nada.
+
+Si ya quedó un comentario con imagen rota, borralo desde la UI de GitHub (o con
+`gh api -X DELETE repos/<owner>/<repo>/issues/comments/<comment_id>`) y reintentá.
+
+### Marca de agua y rate-limit (ruta sin token)
+
+Por defecto, `pr-meme` usa memegen.link **sin token** (cero secretos, que es lo que querés en
+un repo público). La política oficial de memegen es que las requests **anónimas** (sin
+`?token=`) pueden salir **con marca de agua** y están sujetas a **rate-limit transitorio** —
+esa es la causa más probable de un `RENDER_FAIL [transient]`. Si tenés un token propio de
+memegen y querés evitar marca de agua y rate-limit, pasalo con `--token` (se agrega como
+`?token=...` a la URL). **No se guarda en el repo**: lo pasás vos en cada invocación (p. ej.
+desde una variable de entorno). El flujo sin token sigue siendo el default.
 
 ## Publica de forma responsable
 

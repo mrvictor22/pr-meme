@@ -30,17 +30,24 @@ CLI `gh`. **Nunca publica sin tu confirmación explícita.**
    trátalo como "sin señal de CI".
 4. **Clasifica** con la tabla de decisión (abajo) y elige plantilla + textos.
 5. **Construye y VERIFICA la URL** con el script. `--verify` codifica los caracteres
-   especiales **y** comprueba que la imagen realmente renderiza antes de usarla:
+   especiales (incluidos acentos, `ñ` y emoji → percent-encoding) **y** comprueba que la
+   imagen realmente renderiza antes de usarla:
    ```bash
-   python3 scripts/build_meme_url.py --template <plantilla> --top "<ARRIBA>" --bottom "<ABAJO>" --verify
+   python3 "${CLAUDE_PLUGIN_ROOT}/scripts/build_meme_url.py" --template <plantilla> --top "<ARRIBA>" --bottom "<ABAJO>" --verify
    ```
-   - `RENDER_OK` (exit 0) → seguí al paso 6.
-   - `RENDER_FAIL <status>` (exit 2) → **memegen.link no está renderizando ahora**
-     (típicamente `503`: su backend en Heroku está caído; Cloudflare puede seguir sirviendo
-     imágenes *ya cacheadas* con 200, por eso un meme con texto nuevo falla aunque otros
-     carguen). **No publiques** — dejarías una imagen rota en el PR. Avisá al usuario, mostrá
-     la URL por si quiere reintentar luego, y ofrecé reintentar en un rato. **Nunca postees
-     una URL que no pasó la verificación.**
+   (Instalación manual del skill: el script queda en `~/.claude/skills/pr-meme/scripts/build_meme_url.py`.)
+   - `RENDER_OK` (exit 0) → seguí al paso 6. Si el `RENDER_OK` trae un aviso de que memegen
+     **reescribió la URL** a su forma canónica, mostráselo al usuario y confirmá que el texto
+     se ve bien antes de proponer (es señal de texto no canónico).
+   - `RENDER_FAIL [transient] <status>` (exit 2) → memegen **no renderizó ahora; es un
+     transitorio** (cold-start, blip del router de Heroku, o rate-limit de la ruta sin
+     `?token=`), **no** un outage permanente. El script ya reintentó con backoff. **No
+     publiques** todavía — dejarías una imagen rota. Avisá: "memegen no renderizó
+     (transitorio); reintentá en unos segundos", mostrá la URL y ofrecé reintentar. **Nunca
+     postees una URL que no pasó la verificación.**
+   - `RENDER_FAIL [meme_error] <status>` (exit 2) → es un **bug del meme** (p. ej. `404` =
+     template inexistente / URL inválida), no un problema de memegen. **Corregí el meme**
+     (revisá la plantilla y los textos) y volvé a verificar. No tiene sentido reintentar igual.
 6. **Propón el meme** al usuario: muestra la **plantilla elegida**, una **justificación
    de una línea**, los textos y la **URL** + el markdown `![meme](URL)`. Pide aprobación
    explícita ("¿lo publico?").
@@ -72,11 +79,19 @@ feature, etc.) manteniendo el espíritu de la fila.
 
 - **Humor profesional.** Cero ofensas, cero ataques personales, cero sarcasmo hiriente.
   El meme celebra o comenta el trabajo, no a la persona.
-- **Verificación obligatoria.** Nunca publiques una URL sin `RENDER_OK`. Si memegen.link
-  está caído (`RENDER_FAIL`/503), no se postea nada hasta que renderice.
+- **Verificación obligatoria.** Nunca publiques una URL sin `RENDER_OK`. Un `RENDER_FAIL`
+  `[transient]` (5xx/timeout) es un transitorio: reintentá en un rato, no es un outage. Un
+  `RENDER_FAIL [meme_error]` (4xx) es un bug del meme: corregí plantilla/textos. En ningún
+  caso se postea hasta tener `RENDER_OK`.
 - **Confirmación obligatoria.** Propón → espera OK → publica. Nunca al revés.
 - **Sin PR no hay meme.** Si no detectas PR, pide el número; no inventes.
 - **Solo URL externa.** El comentario es `![meme](URL)` de memegen.link. No subas archivos
   de imagen locales (la API de GitHub no lo soporta de forma fiable; GitHub renderiza la
   URL externa vía su proxy Camo).
-- **Sin secretos.** memegen.link no necesita API key. No pidas ni guardes credenciales.
+- **Sin secretos.** memegen.link no necesita API key — el flujo por defecto es sin token. Ese
+  modo anónimo puede salir con marca de agua y está sujeto a rate-limit transitorio en la ruta
+  sin `?token=` (la causa probable de un `RENDER_FAIL [transient]`). Si el usuario tiene un
+  token propio, podés pasarlo con `--token <valor>` (se agrega como `?token=...`); no pidas ni
+  guardes credenciales y mantené el flujo sin token como default. **Ojo:** con `--token`, el
+  token queda en la URL que se postea — no lo uses en PRs públicos salvo que no te importe
+  exponerlo.

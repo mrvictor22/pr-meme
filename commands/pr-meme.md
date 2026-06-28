@@ -33,12 +33,18 @@ comentario **solo tras tu confirmación explícita**.
    | 5 | `refactor`/`cleanup` | `fry` | `NOT SURE IF refactor` / `OR REWRITE` |
    | 6 | por defecto | `success` | `SHIPPED IT` / `LGTM` |
 
-4. **Construye y verifica la URL** (codifica caracteres especiales y comprueba el render):
+4. **Construye y verifica la URL** (codifica caracteres especiales —acentos, `ñ`, emoji vía
+   percent-encoding— y comprueba el render):
    ```bash
-   python3 scripts/build_meme_url.py --template <plantilla> --top "<ARRIBA>" --bottom "<ABAJO>" --verify
+   python3 "${CLAUDE_PLUGIN_ROOT}/scripts/build_meme_url.py" --template <plantilla> --top "<ARRIBA>" --bottom "<ABAJO>" --verify
    ```
-   Si imprime `RENDER_FAIL` (típicamente `503`: backend de memegen.link caído), **no
-   publiques** — dejarías una imagen rota. Avisá, mostrá la URL y ofrecé reintentar luego.
+   (Instalación manual del skill: el script queda en `~/.claude/skills/pr-meme/scripts/`.)
+   - `RENDER_FAIL [transient]` (5xx/timeout): memegen no renderizó por un **transitorio**
+     (cold-start / blip del router Heroku / rate-limit de la ruta sin `?token=`), no un outage.
+     El script ya reintentó con backoff. **No publiques**; avisá "transitorio, reintentá en unos
+     segundos", mostrá la URL y ofrecé reintentar.
+   - `RENDER_FAIL [meme_error]` (4xx, p. ej. `404`): es un **bug del meme** (template/URL
+     inválido). **Corregí el meme** y reverificá; reintentar igual no sirve.
 5. **Propón** el meme: plantilla + justificación de una línea + textos + URL + el markdown
    `![meme](URL)`. Pide aprobación explícita.
 6. **Solo tras OK**, publica:
