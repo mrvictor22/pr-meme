@@ -1,0 +1,19 @@
+{
+  "name": "pr-meme",
+  "owner": {
+    "name": "Victor Alfonso"
+  },
+  "plugins": [
+    {
+      "name": "pr-meme",
+      "source": "./",
+      "description": "Claude Code skill que publica memes contextuales en comentarios de PRs de GitHub",
+      "version": "1.0.0",
+      "license": "MIT",
+      "author": {
+        "name": "Victor Alfonso"
+      },
+      "keywords": ["github", "pr", "meme", "memegen", "gh", "code-review"]
+    }
+  ]
+}
