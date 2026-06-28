@@ -29,10 +29,18 @@ CLI `gh`. **Nunca publica sin tu confirmación explícita.**
 3. **Lee el estado de CI:** ¿verde (todos pasan) o rojo (algún `fail`)? Si `NO_CHECKS`,
    trátalo como "sin señal de CI".
 4. **Clasifica** con la tabla de decisión (abajo) y elige plantilla + textos.
-5. **Construye la URL** con el script (codifica los caracteres especiales):
+5. **Construye y VERIFICA la URL** con el script. `--verify` codifica los caracteres
+   especiales **y** comprueba que la imagen realmente renderiza antes de usarla:
    ```bash
-   python3 scripts/build_meme_url.py --template <plantilla> --top "<ARRIBA>" --bottom "<ABAJO>"
+   python3 scripts/build_meme_url.py --template <plantilla> --top "<ARRIBA>" --bottom "<ABAJO>" --verify
    ```
+   - `RENDER_OK` (exit 0) → seguí al paso 6.
+   - `RENDER_FAIL <status>` (exit 2) → **memegen.link no está renderizando ahora**
+     (típicamente `503`: su backend en Heroku está caído; Cloudflare puede seguir sirviendo
+     imágenes *ya cacheadas* con 200, por eso un meme con texto nuevo falla aunque otros
+     carguen). **No publiques** — dejarías una imagen rota en el PR. Avisá al usuario, mostrá
+     la URL por si quiere reintentar luego, y ofrecé reintentar en un rato. **Nunca postees
+     una URL que no pasó la verificación.**
 6. **Propón el meme** al usuario: muestra la **plantilla elegida**, una **justificación
    de una línea**, los textos y la **URL** + el markdown `![meme](URL)`. Pide aprobación
    explícita ("¿lo publico?").
@@ -64,6 +72,8 @@ feature, etc.) manteniendo el espíritu de la fila.
 
 - **Humor profesional.** Cero ofensas, cero ataques personales, cero sarcasmo hiriente.
   El meme celebra o comenta el trabajo, no a la persona.
+- **Verificación obligatoria.** Nunca publiques una URL sin `RENDER_OK`. Si memegen.link
+  está caído (`RENDER_FAIL`/503), no se postea nada hasta que renderice.
 - **Confirmación obligatoria.** Propón → espera OK → publica. Nunca al revés.
 - **Sin PR no hay meme.** Si no detectas PR, pide el número; no inventes.
 - **Solo URL externa.** El comentario es `![meme](URL)` de memegen.link. No subas archivos

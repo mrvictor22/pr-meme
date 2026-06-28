@@ -29,6 +29,9 @@ Usage:
 """
 import argparse
 import sys
+import time
+import urllib.error
+import urllib.request
 
 BASE = "https://api.memegen.link/images"
 
@@ -67,6 +70,34 @@ def build_url(template, top="", bottom="", ext="png"):
     return "{}/{}/{}/{}.{}".format(
         BASE, template.strip().lower(), encode(top), encode(bottom), ext
     )
+
+
+def verify(url, timeout=8, retries=1):
+    """GET the URL and confirm it actually renders an image.
+
+    memegen.link runs on Heroku behind Cloudflare; when the render backend is
+    down it returns 503 (and Cloudflare may still serve *cached* images with
+    200). Posting a URL that 503s leaves a broken image in the PR — so we check
+    before proposing. Returns (ok, detail).
+    """
+    last = "no response"
+    # ponytail: one short retry covers a Heroku cold-start; not a full backoff.
+    for attempt in range(retries + 1):
+        try:
+            req = urllib.request.Request(
+                url, method="GET", headers={"User-Agent": "pr-meme/1.0"})
+            with urllib.request.urlopen(req, timeout=timeout) as r:
+                ctype = r.headers.get("Content-Type", "")
+                if r.status == 200 and ctype.startswith("image/"):
+                    return True, "200 {}".format(ctype)
+                last = "{} {}".format(r.status, ctype or "?")
+        except urllib.error.HTTPError as e:
+            last = "{} {}".format(e.code, e.reason)
+        except Exception as e:  # noqa: BLE001 - network/url errors, report verbatim
+            last = "error: {}".format(e)
+        if attempt < retries:
+            time.sleep(1.5)
+    return False, last
 
 
 def _selftest():
@@ -114,6 +145,11 @@ def main():
     p.add_argument("--bottom", default="", help="bottom text line")
     p.add_argument("--ext", default="png",
                    help="image extension (png, jpg, gif, webp). Default: png")
+    p.add_argument("--verify", action="store_true",
+                   help="check that the URL actually renders before using it; "
+                        "exit code 2 (and RENDER_FAIL line) if it does not")
+    p.add_argument("--timeout", type=float, default=8.0,
+                   help="seconds to wait per verify request. Default: 8")
     p.add_argument("--selftest", action="store_true",
                    help="run encoding self-tests and exit")
     args = p.parse_args()
@@ -122,7 +158,13 @@ def main():
         return _selftest()
     if not args.template:
         p.error("--template is required (or use --selftest)")
-    print(build_url(args.template, args.top, args.bottom, args.ext))
+
+    url = build_url(args.template, args.top, args.bottom, args.ext)
+    print(url)
+    if args.verify:
+        ok, detail = verify(url, timeout=args.timeout)
+        print(("RENDER_OK " if ok else "RENDER_FAIL ") + detail)
+        return 0 if ok else 2
     return 0
 
 

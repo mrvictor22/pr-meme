@@ -33,10 +33,12 @@ comentario **solo tras tu confirmación explícita**.
    | 5 | `refactor`/`cleanup` | `fry` | `NOT SURE IF refactor` / `OR REWRITE` |
    | 6 | por defecto | `success` | `SHIPPED IT` / `LGTM` |
 
-4. **Construye la URL** (codifica caracteres especiales):
+4. **Construye y verifica la URL** (codifica caracteres especiales y comprueba el render):
    ```bash
-   python3 scripts/build_meme_url.py --template <plantilla> --top "<ARRIBA>" --bottom "<ABAJO>"
+   python3 scripts/build_meme_url.py --template <plantilla> --top "<ARRIBA>" --bottom "<ABAJO>" --verify
    ```
+   Si imprime `RENDER_FAIL` (típicamente `503`: backend de memegen.link caído), **no
+   publiques** — dejarías una imagen rota. Avisá, mostrá la URL y ofrecé reintentar luego.
 5. **Propón** el meme: plantilla + justificación de una línea + textos + URL + el markdown
    `![meme](URL)`. Pide aprobación explícita.
 6. **Solo tras OK**, publica:
@@ -44,5 +46,6 @@ comentario **solo tras tu confirmación explícita**.
    gh pr comment <num> --body "![meme](URL)"
    ```
 
-**Reglas:** humor profesional sin ofensas; nunca publicar sin confirmación; sin PR no hay
-meme (pide el número); solo URL externa, nada de subir imágenes; sin API keys.
+**Reglas:** humor profesional sin ofensas; nunca publicar sin `RENDER_OK` ni sin
+confirmación; sin PR no hay meme (pide el número); solo URL externa, nada de subir
+imágenes; sin API keys.

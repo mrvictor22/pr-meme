@@ -103,7 +103,11 @@ python3 scripts/build_meme_url.py --template mordor \
   --top "ONE DOES NOT SIMPLY" --bottom "review a 2000 line PR"
 # -> https://api.memegen.link/images/mordor/ONE_DOES_NOT_SIMPLY/review_a_2000_line_PR.png
 
-python3 scripts/build_meme_url.py --selftest   # valida la codificación
+# --verify comprueba que la imagen realmente renderiza (exit 2 si no):
+python3 scripts/build_meme_url.py --template fine --top "THIS IS FINE" --bottom "" --verify
+# -> URL + "RENDER_OK 200 image/png"  (o "RENDER_FAIL 503 ..." si memegen está caído)
+
+python3 scripts/build_meme_url.py --selftest   # valida la codificación (offline)
 ```
 
 Reglas de escape aplicadas: ` ` → `_`, `_` → `__`, `-` → `--`, `?` → `~q`, `&` → `~a`,
@@ -122,6 +126,20 @@ salto de línea → `~n`, línea vacía → `_`.
 - **Plantillas personalizadas con tu propia imagen:** memegen.link soporta
   `?background=<url>` sobre la plantilla `custom`. Pasa el texto por el script y añade el
   parámetro a mano si lo necesitas.
+
+## Solución de problemas
+
+**El meme sale como imagen rota / no carga en el PR.** memegen.link corre en Heroku detrás
+de Cloudflare; cuando su backend de render se cae, devuelve **`503`** para imágenes nuevas
+(Cloudflare puede seguir sirviendo con `200` las que ya estaban *cacheadas*, así que algunas
+cargan y otras no). El skill **verifica el render con `--verify` antes de proponer/publicar**
+y **no postea** si da `RENDER_FAIL`, justo para no dejar imágenes rotas. Si te pasa:
+
+- Comprobá el estado: `python3 scripts/build_meme_url.py --template fine --top hola --bottom "" --verify`
+  → `RENDER_FAIL 503` significa que la fuente está caída; reintentá más tarde.
+- Si ya quedó un comentario con imagen rota, borralo desde la UI de GitHub (o con
+  `gh api -X DELETE repos/<owner>/<repo>/issues/comments/<comment_id>`) y reintentá cuando
+  memegen.link vuelva.
 
 ## Publica de forma responsable
 
