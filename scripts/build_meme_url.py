@@ -7,7 +7,10 @@ emoji) must be escaped or the URL is invalid and the render fails. This script
 applies memegen.link's canonical escaping rules and then percent-encodes each
 segment — no API key, no required network call, just deterministic encoding.
 
-Two-stage encoding (matches the official memegen `app/utils/text.py::_encode`):
+Two-stage encoding, based on memegen's official `app/utils/text.py::_encode`
+(token order kept identical, with ONE intentional divergence: smart punctuation
+is normalized FIRST, so a literal en-dash becomes `--`/a hyphen instead of
+upstream's lone `-`, which memegen would render as a space — we want a dash):
 
   1. Token replacements (typographic normalization first, then canonical order;
      space comes BEFORE the '~' tokens):
