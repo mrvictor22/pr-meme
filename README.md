@@ -133,7 +133,9 @@ salto de línea → `~n`, línea vacía → `_`.
 de Cloudflare; cuando su backend de render se cae, devuelve **`503`** para imágenes nuevas
 (Cloudflare puede seguir sirviendo con `200` las que ya estaban *cacheadas*, así que algunas
 cargan y otras no). El skill **verifica el render con `--verify` antes de proponer/publicar**
-y **no postea** si da `RENDER_FAIL`, justo para no dejar imágenes rotas. Si te pasa:
+y **no postea** si da `RENDER_FAIL`, justo para no dejar imágenes rotas. (`--verify` fuerza
+un *cache miss* para medir el backend real: una copia cacheada con `200` no lo engaña — es
+exactamente lo que el proxy Camo de GitHub podría no poder servir.) Si te pasa:
 
 - Comprobá el estado: `python3 scripts/build_meme_url.py --template fine --top hola --bottom "" --verify`
   → `RENDER_FAIL 503` significa que la fuente está caída; reintentá más tarde.

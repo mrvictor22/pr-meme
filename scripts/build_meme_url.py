@@ -73,19 +73,26 @@ def build_url(template, top="", bottom="", ext="png"):
 
 
 def verify(url, timeout=8, retries=1):
-    """GET the URL and confirm it actually renders an image.
+    """GET the URL and confirm memegen.link's ORIGIN actually renders an image.
 
-    memegen.link runs on Heroku behind Cloudflare; when the render backend is
-    down it returns 503 (and Cloudflare may still serve *cached* images with
-    200). Posting a URL that 503s leaves a broken image in the PR — so we check
-    before proposing. Returns (ok, detail).
+    memegen.link runs on Heroku behind Cloudflare. When the render backend is
+    down it returns 503, but Cloudflare may still serve a *stale cached* 200 to
+    some edges. That's a trap: this check could pass while GitHub's Camo proxy —
+    hitting an uncached edge — gets a 503/504 and shows a broken image. So we
+    force a cache MISS (unique cache-buster query + no-cache headers) to reach
+    the origin and measure its real state. memegen ignores unknown query params,
+    so the rendered image is identical to the clean URL we actually post.
+    Returns (ok, detail).
     """
+    sep = "&" if "?" in url else "?"
+    check_url = "{}{}cb={}".format(url, sep, int(time.time() * 1000))
+    headers = {"User-Agent": "pr-meme/1.0",
+               "Cache-Control": "no-cache", "Pragma": "no-cache"}
     last = "no response"
     # ponytail: one short retry covers a Heroku cold-start; not a full backoff.
     for attempt in range(retries + 1):
         try:
-            req = urllib.request.Request(
-                url, method="GET", headers={"User-Agent": "pr-meme/1.0"})
+            req = urllib.request.Request(check_url, method="GET", headers=headers)
             with urllib.request.urlopen(req, timeout=timeout) as r:
                 ctype = r.headers.get("Content-Type", "")
                 if r.status == 200 and ctype.startswith("image/"):
